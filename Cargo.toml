@@ -1,6 +1,8 @@
 [package]
 name = "pseudoterminal"
+description = "A cross-platform pseudoterminal implementation with async support"
 version = "0.1.0"
+license = "MIT"
 edition = "2021"
 
 [dependencies]
@@ -17,6 +19,4 @@ nix = { version = "0.27.1", features = ["term", "ioctl", "process", "fs"] }
 windows = { version = "0.51.0", features = [] }
 
 [features]
-default-features = ["non-blocking"]
-
 non-blocking = ["dep:tokio"]
