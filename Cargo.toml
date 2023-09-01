@@ -1,0 +1,22 @@
+[package]
+name = "pseudoterminal"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cfg-if = "1.0.0"
+tokio = { version = "1.32.0", default-features = false, features = [
+  "process",
+  "fs",
+], optional = true }
+
+[target.'cfg(not(windows))'.dependencies]
+nix = { version = "0.27.1", features = ["term", "ioctl", "process", "fs"] }
+
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.51.0", features = [] }
+
+[features]
+default-features = ["non-blocking"]
+
+non-blocking = ["dep:tokio"]
