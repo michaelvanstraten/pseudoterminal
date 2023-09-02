@@ -1,5 +1,5 @@
 #![feature(doc_auto_cfg)]
-#![feature(stdio_makes_pipe)]
+#![feature(windows_process_extensions_raw_attribute)]
 
 mod blocking;
 #[cfg(feature = "non-blocking")]
@@ -10,6 +10,6 @@ pub use blocking::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TerminalSize {
-    pub columns: u16,
     pub rows: u16,
+    pub columns: u16,
 }
