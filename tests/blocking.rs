@@ -7,7 +7,16 @@ use pseudoterminal::{CommandExt, TerminalSize};
 
 #[test]
 fn read_from_term() {
-    let mut terminal = Command::new("echo")
+    cfg_if::cfg_if! {
+        if #[cfg(unix)] {
+            let mut cmd = Command::new("echo");
+        } else if #[cfg(windows)] {
+            let mut cmd = Command::new("cmd.exe");
+            cmd.arg("echo");
+        }
+    }
+
+    let mut terminal = cmd
         .arg("Hello, World!")
         .spawn_terminal()
         .expect("should be spawnable");
@@ -28,9 +37,16 @@ fn read_from_term() {
 
 #[test]
 fn write_to_term() {
-    let mut terminal = Command::new("cat")
-        .spawn_terminal()
-        .expect("should be spawnable");
+    cfg_if::cfg_if! {
+        if #[cfg(unix)] {
+            let mut cmd = Command::new("cat");
+        } else if #[cfg(windows)] {
+            let mut cmd = Command::new("cmd.exe");
+            cmd.arg("findstr").arg("\"^\"");
+        }
+    }
+
+    let mut terminal = cmd.spawn_terminal().expect("should be spawnable");
 
     const TEST_STRING: &str = "Hello, World!\r\n";
 
@@ -59,9 +75,12 @@ fn write_to_term() {
 
 #[test]
 fn set_term_size() {
-    let mut terminal = Command::new("echo")
-        .spawn_terminal()
-        .expect("should be spawnable");
+    #[cfg(unix)]
+    let mut cmd = Command::new("echo");
+    #[cfg(windows)]
+    let mut cmd = Command::new("cmd.exe");
+
+    let mut terminal = cmd.spawn_terminal().expect("should be spawnable");
 
     let new_size = TerminalSize {
         columns: 40,
