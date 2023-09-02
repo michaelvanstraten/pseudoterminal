@@ -1,5 +1,5 @@
-#![feature(doc_auto_cfg)]
-#![feature(windows_process_extensions_raw_attribute)]
+#![cfg_attr(all(doc, CHANNEL_NIGHTLY), feature(doc_auto_cfg))]
+#![cfg_attr(windows, feature(windows_process_extensions_raw_attribute))]
 
 mod blocking;
 #[cfg(feature = "non-blocking")]

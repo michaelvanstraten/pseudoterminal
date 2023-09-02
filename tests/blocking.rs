@@ -16,21 +16,24 @@ fn read_from_term() {
         }
     }
 
+    const TEST_STRING: &str = "Hello, World!";
+
     let mut terminal = cmd
-        .arg("Hello, World!")
+        .arg(TEST_STRING)
         .spawn_terminal()
         .expect("should be spawnable");
 
-    let mut buf = String::new();
+    let mut buf = vec![0; TEST_STRING.len()];
+    buf.resize(TEST_STRING.len(), 0);
 
     terminal
         .termout
         .as_mut()
         .unwrap()
-        .read_to_string(&mut buf)
+        .read_exact(&mut buf)
         .expect("terminal output was not readable");
 
-    assert_eq!(buf, "Hello, World!\r\n");
+    assert_eq!(buf, TEST_STRING.as_bytes());
 
     terminal.close().expect("");
 }
@@ -58,7 +61,6 @@ fn write_to_term() {
         .unwrap();
 
     let mut buf = vec![0; TEST_STRING.len()];
-
     buf.resize(TEST_STRING.len(), 0);
 
     terminal
