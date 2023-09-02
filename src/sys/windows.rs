@@ -6,6 +6,7 @@ use std::os::windows::process::CommandExt;
 use std::process::Command;
 
 use windows::Win32::Foundation::HANDLE;
+use windows::Win32::Foundation::CloseHandle;
 use windows::Win32::System::Console::{
     ClosePseudoConsole, CreatePseudoConsole, ResizePseudoConsole, COORD, HPCON,
 };
@@ -50,6 +51,9 @@ impl TerminalHandle {
         let size = COORD { X: 60, Y: 40 };
 
         let h_pc = unsafe { CreatePseudoConsole(size, input, output, 0)? };
+
+        unsafe { CloseHandle(input)? };
+        unsafe { CloseHandle(output)? };
 
         Ok(TerminalHandle(h_pc))
     }
