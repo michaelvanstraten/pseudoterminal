@@ -93,6 +93,7 @@ fn set_term_size() {
         .set_term_size(new_size)
         .expect("terminal size should be settable");
 
+    #[cfg(unix)]
     assert_eq!(new_size, terminal.get_term_size().unwrap());
 
     terminal.close().expect("");

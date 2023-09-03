@@ -28,6 +28,7 @@ impl Terminal {
         })
     }
 
+    #[cfg(unix)]
     pub fn get_term_size(&mut self) -> io::Result<TerminalSize> {
         self.handle.get_term_size()
     }

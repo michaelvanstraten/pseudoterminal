@@ -5,8 +5,8 @@ use std::os::windows::io::FromRawHandle;
 use std::os::windows::process::CommandExt;
 use std::process::Command;
 
-use windows::Win32::Foundation::HANDLE;
 use windows::Win32::Foundation::CloseHandle;
+use windows::Win32::Foundation::HANDLE;
 use windows::Win32::System::Console::{
     ClosePseudoConsole, CreatePseudoConsole, ResizePseudoConsole, COORD, HPCON,
 };
@@ -63,17 +63,13 @@ impl TerminalHandle {
         todo!()
     }
 
-    pub fn get_term_size(&self) -> io::Result<crate::TerminalSize> {
-        todo!()
-    }
-
     pub fn set_term_size(&mut self, new_size: crate::TerminalSize) -> io::Result<()> {
         let coord_size = COORD {
             X: new_size.rows as i16,
             Y: new_size.columns as i16,
         };
 
-        unsafe { Ok(ResizePseudoConsole(*&mut self.0, coord_size)?) }
+        unsafe { Ok(ResizePseudoConsole(self.0, coord_size)?) }
     }
 
     pub(crate) fn close(self) -> io::Result<()> {
