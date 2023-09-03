@@ -36,8 +36,8 @@ pub(crate) fn open_handle_and_io(cmd: &mut Command) -> io::Result<(TerminalHandl
 
     let io = unsafe {
         (
-            File::from_raw_handle(output_read_side.0 as *mut _),
             File::from_raw_handle(input_write_side.0 as *mut _),
+            File::from_raw_handle(output_read_side.0 as *mut _),
         )
     };
 
