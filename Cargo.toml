@@ -5,6 +5,10 @@ version = "0.1.1"
 license = "MIT"
 edition = "2021"
 
+[package.metadata.docs.rs]
+# document all features
+all-features = true
+
 keywords = ["pty", "conpty", "terminal", "process"]
 categories = ["asynchronous", "command-line-interface"]
 
