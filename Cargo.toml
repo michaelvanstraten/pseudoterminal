@@ -4,6 +4,7 @@ description = "A cross-platform pseudoterminal implementation with async support
 version = "0.1.1"
 license = "MIT"
 edition = "2021"
+repository = "https://github.com/michaelvanstraten/pseudoterminal"
 
 [package.metadata.docs.rs]
 # document all features
