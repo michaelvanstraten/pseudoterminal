@@ -2,6 +2,10 @@
 
 The `pseudoterminal` crate is a versatile pseudoterminal (PTY) implementation designed for Rust, offering asynchronous capabilities. This library provides a straightforward and efficient means to interact with child processes via pseudoterminals. Whether you're building interactive command-line applications, custom terminals, or automating terminal interactions, `pseudoterminal` is your reliable companion.
 
+## **Note**
+
+Some features of this crate are not implemented yet such as complete `windows` support and `non-blocking` io.
+
 ### Key Features
 
 - **Cross-Platform Compatibility**: Works seamlessly on both Windows and Unix-based systems, ensuring broad compatibility for your projects.
