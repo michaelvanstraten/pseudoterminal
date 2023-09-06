@@ -107,9 +107,7 @@ impl TerminalHandle {
         Ok(())
     }
 
-    pub fn close(self) -> io::Result<()> {
-        Ok(())
-    }
+    pub fn close(self) {}
 }
 
 impl From<crate::TerminalSize> for Winsize {

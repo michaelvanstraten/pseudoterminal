@@ -72,9 +72,7 @@ impl TerminalHandle {
         unsafe { Ok(ResizePseudoConsole(self.0, coord_size)?) }
     }
 
-    pub(crate) fn close(self) -> io::Result<()> {
+    pub(crate) fn close(self) {
         unsafe { ClosePseudoConsole(self.0) }
-
-        Ok(())
     }
 }
