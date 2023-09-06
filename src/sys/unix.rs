@@ -106,8 +106,6 @@ impl TerminalHandle {
 
         Ok(())
     }
-
-    pub fn close(self) {}
 }
 
 impl From<crate::TerminalSize> for Winsize {

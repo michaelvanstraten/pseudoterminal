@@ -40,8 +40,6 @@ impl Terminal {
     pub fn close(mut self) -> io::Result<()> {
         self.process.kill()?;
 
-        self.handle.close();
-
         Ok(())
     }
 }

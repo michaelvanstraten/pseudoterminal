@@ -34,8 +34,6 @@ impl Terminal {
     pub async fn close(mut self) -> io::Result<()> {
         self.process.kill().await?;
 
-        self.handle.close();
-
         Ok(())
     }
 }

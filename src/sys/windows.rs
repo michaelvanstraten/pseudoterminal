@@ -71,8 +71,10 @@ impl TerminalHandle {
 
         unsafe { Ok(ResizePseudoConsole(self.0, coord_size)?) }
     }
+}
 
-    pub(crate) fn close(self) {
+impl Drop for TerminalHandle {
+    fn drop(&mut self) {
         unsafe { ClosePseudoConsole(self.0) }
     }
 }
