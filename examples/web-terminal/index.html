@@ -1,0 +1,31 @@
+<!doctype html>
+  <html>
+    <head>
+      <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
+      <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
+    </head>
+    <body style="height: 100%; background: black">
+      <div id="terminal"></div>
+      <script>
+        // Initialize xterm.js
+        var term = new Terminal();
+        term.open(document.getElementById('terminal'));
+        // Connect to the WebSocket server
+        var ws = new WebSocket('ws://127.0.0.1:3001/');
+        ws.binaryType = 'arraybuffer';
+        // When data is received from the server, write to terminal
+        ws.onmessage = function(event) {
+          var data = event.data;
+          if (typeof data === 'string') {
+            term.write(data);
+          } else {
+            term.write(new Uint8Array(data));
+          }
+        };
+        // When user types, send data to server
+        term.onData(function(data) {
+          ws.send(data);
+        });
+      </script>
+    </body>
+  </html>
