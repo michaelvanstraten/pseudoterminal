@@ -4,7 +4,7 @@ use std::io::{Read, Write};
 use websocket::sync::Server;
 use websocket::OwnedMessage;
 
-use pseudoterminal::CommandExt;
+use pseudoterminal::sync::CommandExt;
 
 fn main() {
 	let server = Server::bind("127.0.0.1:3001").unwrap();
@@ -21,7 +21,15 @@ fn main() {
 			let (mut receiver, mut sender) = ws.split().unwrap();
 
             // Spawn a new pseudoterminal (e.g., bash shell)
-            let mut cmd = Command::new("bash");
+            let mut cmd = Command::new(cfg_if::cfg_if! {
+                if #[cfg(unix)] {
+                    "bash"
+                } else if #[cfg(windows)] {
+                    "cmd.exe"
+                } else {
+                    panic!("Unsupported platform")
+                }
+            });
             let mut terminal = match cmd.spawn_terminal() {
                 Ok(t) => t,
                 Err(e) => {
