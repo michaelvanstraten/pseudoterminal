@@ -1,12 +1,10 @@
-use std::{
-    io::{Read, Write},
-    process::Command,
-};
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::process::Command;
 
-use pseudoterminal::{CommandExt, TerminalSize};
+use pseudoterminal::{AsyncCommandExt, TerminalSize};
 
-#[test]
-fn read_from_term() {
+#[tokio::test]
+async fn read_from_term() {
     cfg_if::cfg_if! {
         if #[cfg(unix)] {
             let mut cmd = Command::new("echo");
@@ -31,15 +29,16 @@ fn read_from_term() {
         .as_mut()
         .unwrap()
         .read_exact(&mut buf)
+        .await
         .expect("terminal output was not readable");
 
     assert_eq!(buf, TEST_STRING.as_bytes());
 
-    terminal.close().expect("");
+    terminal.close().await.expect("failed to close terminal");
 }
 
-#[test]
-fn write_to_term() {
+#[tokio::test]
+async fn write_to_term() {
     cfg_if::cfg_if! {
         if #[cfg(unix)] {
             let mut cmd = Command::new("cat");
@@ -58,6 +57,7 @@ fn write_to_term() {
         .as_mut()
         .unwrap()
         .write_all(TEST_STRING.as_bytes())
+        .await
         .unwrap();
 
     let mut buf = vec![0; TEST_STRING.len()];
@@ -68,23 +68,22 @@ fn write_to_term() {
         .as_mut()
         .unwrap()
         .read_exact(&mut buf)
+        .await
         .expect("terminal output was not readable");
 
     assert_eq!(buf, TEST_STRING.as_bytes());
 
-    terminal.close().expect("");
+    terminal.close().await.expect("failed to close terminal");
 }
 
-#[test]
-fn set_term_size() {
+#[tokio::test]
+async fn set_term_size() {
     #[cfg(unix)]
     let mut cmd = Command::new("echo");
     #[cfg(windows)]
     let mut cmd = Command::new("cmd.exe");
 
     let mut terminal = cmd.spawn_terminal().expect("should be spawnable");
-
-    println!("{:#?}", terminal.get_term_size().unwrap());
 
     let new_size = TerminalSize {
         columns: 40,
@@ -98,5 +97,39 @@ fn set_term_size() {
     #[cfg(unix)]
     assert_eq!(new_size, terminal.get_term_size().unwrap());
 
-    terminal.close().expect("");
+    terminal.close().await.expect("failed to close terminal");
+}
+
+#[tokio::test]
+async fn split_terminal() {
+    cfg_if::cfg_if! {
+        if #[cfg(unix)] {
+            let mut cmd = Command::new("cat");
+        } else if #[cfg(windows)] {
+            let mut cmd = Command::new("cmd.exe");
+            cmd.arg("findstr").arg("\"^\"");
+        }
+    }
+
+    let mut terminal = cmd.spawn_terminal().expect("should be spawnable");
+
+    // Get the split streams
+    let (mut terminal_in, mut terminal_out) =
+        terminal.split().expect("should be able to split terminal");
+
+    const TEST_STRING: &str = "Hello, Split Terminal!\r\n";
+
+    terminal_in
+        .write_all(TEST_STRING.as_bytes())
+        .await
+        .expect("should be able to write to split input");
+
+    let mut buf = vec![0; TEST_STRING.len()];
+
+    terminal_out
+        .read_exact(&mut buf)
+        .await
+        .expect("should be able to read from split output");
+
+    assert_eq!(buf, TEST_STRING.as_bytes());
 }

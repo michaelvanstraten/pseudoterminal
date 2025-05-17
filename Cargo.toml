@@ -2,35 +2,54 @@
 name = "pseudoterminal"
 description = "A cross-platform pseudoterminal implementation with async support"
 version = "0.2.1"
+authors = ["Michael van Straten"]
 license = "MIT"
 edition = "2024"
 repository = "https://github.com/michaelvanstraten/pseudoterminal"
-
-[package.metadata.docs.rs]
-# document all features
-all-features = true
-
+documentation = "https://docs.rs/pseudoterminal"
 keywords = ["pty", "conpty", "terminal", "process"]
 categories = ["asynchronous", "command-line-interface"]
+rust-version = "1.87.0"
+
+[package.metadata.docs.rs]
+all-features = true
+rustc-args = ["--cfg", "tokio_unstable"]
 
 [dependencies]
 cfg-if = "1.0.0"
-tokio = { version = "1.32.0", default-features = false, features = [
-  "process",
-  "fs",
+tokio = { version = "1.45.0", default-features = false, features = [
+  "process"
 ], optional = true }
 
 [target.'cfg(not(windows))'.dependencies]
-nix = { version = "0.27.1", features = ["term", "ioctl", "process", "fs"] }
+libc = "0.2.172"
 
 [build-dependencies]
 rustc_version = "0.4.0"
 
 [dev-dependencies]
 websocket = "0.27.1"
+tokio-tungstenite = "0.26.2"
+tungstenite = "0.26.2"
+futures-util = "0.3.31"
+tokio = { version = "1.45.0", features = [
+  "rt-multi-thread",
+  "macros",
+  "io-util",
+  "process",
+] }
 
 [features]
+default = []
 non-blocking = ["dep:tokio"]
 
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(CHANNEL_NIGHTLY)'] }
+
+[[test]]
+name = "non_blocking"
+required-features = ["non-blocking"]
+
+[[example]]
+name = "non_blocking"
+required-features = ["non-blocking"]

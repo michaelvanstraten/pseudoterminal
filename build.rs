@@ -8,5 +8,6 @@ fn main() {
         Channel::Nightly => "CHANNEL_NIGHTLY",
         Channel::Dev => "CHANNEL_DEV",
     };
-    println!("cargo:rustc-cfg={channel}")
+    println!("cargo:rustc-cfg={channel}");
+    println!("cargo:rustc-cfg=tokio_unstable");
 }

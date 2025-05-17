@@ -41,15 +41,23 @@
 //! }
 //! ```
 
-#[cfg(feature = "non-blocking")]
-pub mod r#async;
+#[cfg(windows)]
+#[path = "pal/windows.rs"]
 mod pal;
-pub mod sync;
 
-// Re-export CommandExt traits at the root level for backward compatibility
+#[cfg(unix)]
+#[path = "pal/unix.rs"]
+mod pal;
+
+pub mod blocking;
+
 #[cfg(feature = "non-blocking")]
-pub use r#async::CommandExt as AsyncCommandExt;
-pub use sync::CommandExt;
+pub mod non_blocking;
+
+pub use blocking::CommandExt;
+
+#[cfg(feature = "non-blocking")]
+pub use non_blocking::CommandExt as AsyncCommandExt;
 
 /// Represents the dimensions of a terminal in rows and columns.
 ///
@@ -79,4 +87,13 @@ pub struct TerminalSize {
     pub rows: u16,
     /// The number of columns (width) in the terminal
     pub columns: u16,
+}
+
+impl Default for TerminalSize {
+    fn default() -> Self {
+        TerminalSize {
+            rows: 24,
+            columns: 80,
+        }
+    }
 }

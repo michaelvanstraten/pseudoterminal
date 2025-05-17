@@ -5,7 +5,7 @@ use std::thread;
 use websocket::OwnedMessage;
 use websocket::sync::Server;
 
-use pseudoterminal::sync::CommandExt;
+use pseudoterminal::CommandExt;
 
 fn main() {
     let server = Server::bind("127.0.0.1:3001").unwrap();
@@ -17,7 +17,7 @@ fn main() {
 
             let ip = ws.peer_addr().unwrap();
 
-            println!("Connection from {}", ip);
+            println!("Connection from {ip}");
 
             let (mut receiver, mut sender) = ws.split().unwrap();
 
@@ -26,7 +26,7 @@ fn main() {
                 if #[cfg(unix)] {
                     let mut cmd = Command::new("bash");
                 } else if #[cfg(windows)] {
-                    let mut cmd = Command::new("cmd.exe");
+                    let mut cmd = Command::new("powershell.exe");
                 } else {
                     panic!("Unsupported platform")
                 }
@@ -34,7 +34,7 @@ fn main() {
             let mut terminal = match cmd.spawn_terminal() {
                 Ok(t) => t,
                 Err(e) => {
-                    eprintln!("Failed to spawn terminal: {}", e);
+                    eprintln!("Failed to spawn terminal: {e}");
                     return;
                 }
             };
@@ -49,12 +49,12 @@ fn main() {
                         Ok(n) => {
                             let msg = OwnedMessage::Binary(buffer[..n].to_vec());
                             if let Err(e) = sender.send_message(&msg) {
-                                eprintln!("Error sending to WebSocket: {}", e);
+                                eprintln!("Error sending to WebSocket: {e}");
                                 break;
                             }
                         }
                         Err(e) => {
-                            eprintln!("Error reading from PTY: {}", e);
+                            eprintln!("Error reading from PTY: {e}");
                             break;
                         }
                     }
@@ -65,7 +65,7 @@ fn main() {
                 match message.unwrap() {
                     OwnedMessage::Text(data) => {
                         if let Err(e) = termin.write_all(data.as_bytes()) {
-                            eprintln!("Error writing to PTY: {}", e);
+                            eprintln!("Error writing to PTY: {e}");
                             break;
                         }
                     }
@@ -79,7 +79,7 @@ fn main() {
 
             // Wait for both threads to finish
             let _ = send_thread.join();
-            println!("Connection from {} closed", ip);
+            println!("Connection from {ip} closed");
         });
     }
 }

@@ -1,4 +1,5 @@
 use std::io;
+use std::io::{PipeReader, PipeWriter};
 use std::os::windows;
 use std::os::windows::io::AsRawHandle;
 use std::os::windows::process::CommandExt;
@@ -6,24 +7,16 @@ use std::process::{Child as ChildProcess, Command};
 
 use crate::TerminalSize;
 
+#[derive(Debug)]
 pub struct Terminal {
     handle: HPCON,
 }
 
-pub type TerminalIn = io::PipeWriter;
-pub type TerminalOut = io::PipeReader;
-
-pub struct TerminalIo {
-    pub input: Option<TerminalIn>,
-    pub output: Option<TerminalOut>,
-}
-
-// Core Terminal implementation
 impl Terminal {
     pub fn spawn_terminal(
         cmd: &mut Command,
         initial_size: TerminalSize,
-    ) -> io::Result<(Self, ChildProcess, TerminalIo)> {
+    ) -> io::Result<(Self, ChildProcess, (PipeWriter, PipeReader))> {
         let (input_read, input_write) = io::pipe()?;
         let (output_read, output_write) = io::pipe()?;
 
@@ -63,14 +56,11 @@ impl Terminal {
 
         let child_proc = cmd.spawn_with_attributes(&proc_attrs)?;
 
-        Ok((
-            Self { handle },
-            child_proc,
-            TerminalIo {
-                input: Some(input_write),
-                output: Some(output_read),
-            },
-        ))
+        let terminal = Self { handle };
+
+        terminal.set_term_size(initial_size)?;
+
+        Ok((terminal, child_proc, (input_write, output_read)))
     }
 
     pub fn set_term_size(&self, new_size: TerminalSize) -> io::Result<()> {

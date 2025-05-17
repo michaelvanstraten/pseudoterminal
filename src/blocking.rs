@@ -1,11 +1,11 @@
 use std::fmt;
-use std::io::{self, Read, Write};
+use std::io::{self, PipeReader, PipeWriter, Read, Write};
 #[cfg(CHANNEL_NIGHTLY)]
 use std::io::{IoSlice, IoSliceMut};
 use std::process::{Child as ChildProcess, Command};
 
 use crate::TerminalSize;
-use crate::pal as r#impl;
+use crate::pal as imp;
 
 /// Extension trait that adds pseudo-terminal spawning capabilities to `std::process::Command`.  
 ///
@@ -71,17 +71,11 @@ pub trait CommandExt {
 
 impl CommandExt for Command {
     fn spawn_terminal(&mut self) -> io::Result<Terminal> {
-        // Use a default terminal size
-        let default_size = TerminalSize {
-            rows: 24,
-            columns: 80,
-        };
-
-        self.spawn_terminal_with_size(default_size)
+        self.spawn_terminal_with_size(TerminalSize::default())
     }
 
     fn spawn_terminal_with_size(&mut self, size: TerminalSize) -> io::Result<Terminal> {
-        r#impl::Terminal::spawn_terminal(self, size).map(Terminal::from)
+        imp::Terminal::spawn_terminal(self, size).map(Terminal::from)
     }
 }
 
@@ -90,7 +84,7 @@ impl CommandExt for Command {
 /// This struct manages the PTY lifecycle, provides access to its I/O streams,
 /// and allows interaction with the spawned child process.
 pub struct Terminal {
-    handle: r#impl::Terminal,
+    handle: imp::Terminal,
     child_proc: ChildProcess,
     /// The input stream (write) for the terminal. `None` if split.
     pub terminal_in: Option<TerminalIn>,
@@ -98,15 +92,19 @@ pub struct Terminal {
     pub terminal_out: Option<TerminalOut>,
 }
 
-impl From<(r#impl::Terminal, ChildProcess, r#impl::TerminalIo)> for Terminal {
+impl From<(imp::Terminal, ChildProcess, (PipeWriter, PipeReader))> for Terminal {
     fn from(
-        (handle, child_proc, io): (r#impl::Terminal, ChildProcess, r#impl::TerminalIo),
+        (handle, child_proc, (input, output)): (
+            imp::Terminal,
+            ChildProcess,
+            (PipeWriter, PipeReader),
+        ),
     ) -> Terminal {
         Terminal {
             handle,
             child_proc,
-            terminal_in: io.input.map(TerminalIn::from),
-            terminal_out: io.output.map(TerminalOut::from),
+            terminal_in: Some(input.into()),
+            terminal_out: Some(output.into()),
         }
     }
 }
@@ -264,7 +262,7 @@ impl Terminal {
 /// }
 /// ```
 pub struct TerminalIn {
-    inner: r#impl::TerminalIn,
+    inner: PipeWriter,
 }
 
 impl Write for TerminalIn {
@@ -289,21 +287,8 @@ impl Write for TerminalIn {
     }
 }
 
-impl AsRef<r#impl::TerminalIn> for TerminalIn {
-    #[inline]
-    fn as_ref(&self) -> &r#impl::TerminalIn {
-        &self.inner
-    }
-}
-
-impl From<TerminalIn> for r#impl::TerminalIn {
-    fn from(val: TerminalIn) -> Self {
-        val.inner
-    }
-}
-
-impl From<r#impl::TerminalIn> for TerminalIn {
-    fn from(pipe: r#impl::TerminalIn) -> TerminalIn {
+impl From<PipeWriter> for TerminalIn {
+    fn from(pipe: PipeWriter) -> TerminalIn {
         TerminalIn { inner: pipe }
     }
 }
@@ -346,7 +331,7 @@ impl fmt::Debug for TerminalIn {
 /// }
 /// ```
 pub struct TerminalOut {
-    inner: r#impl::TerminalOut,
+    inner: PipeReader,
 }
 
 impl Read for TerminalOut {
@@ -370,21 +355,8 @@ impl Read for TerminalOut {
     }
 }
 
-impl AsRef<r#impl::TerminalOut> for TerminalOut {
-    #[inline]
-    fn as_ref(&self) -> &r#impl::TerminalOut {
-        &self.inner
-    }
-}
-
-impl From<TerminalOut> for r#impl::TerminalOut {
-    fn from(val: TerminalOut) -> Self {
-        val.inner
-    }
-}
-
-impl From<r#impl::TerminalOut> for TerminalOut {
-    fn from(pipe: r#impl::TerminalOut) -> TerminalOut {
+impl From<PipeReader> for TerminalOut {
+    fn from(pipe: PipeReader) -> TerminalOut {
         TerminalOut { inner: pipe }
     }
 }

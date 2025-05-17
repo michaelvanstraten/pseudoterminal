@@ -2,7 +2,6 @@ name: Rust
 
 on:
   push:
-    branches: [ "master" ]
   pull_request:
     branches: [ "master" ]
 
@@ -11,12 +10,18 @@ env:
 
 jobs:
   build:
-
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        msrv: ["1.87.0"]
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
+    - name: Install ${{ matrix.msrv }}
+      uses: dtolnay/rust-toolchain@master
+      with:
+        toolchain: ${{ matrix.msrv }}
     - name: Build
-      run: cargo build --verbose
+      run: cargo build --verbose --all-features
     - name: Run tests
-      run: cargo test --verbose
+      run: cargo test --verbose --all-features
