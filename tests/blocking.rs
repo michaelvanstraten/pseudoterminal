@@ -27,7 +27,7 @@ fn read_from_term() {
     buf.resize(TEST_STRING.len(), 0);
 
     terminal
-        .termout
+        .terminal_out
         .as_mut()
         .unwrap()
         .read_exact(&mut buf)
@@ -54,7 +54,7 @@ fn write_to_term() {
     const TEST_STRING: &str = "Hello, World!\r\n";
 
     terminal
-        .termin
+        .terminal_in
         .as_mut()
         .unwrap()
         .write_all(TEST_STRING.as_bytes())
@@ -64,7 +64,7 @@ fn write_to_term() {
     buf.resize(TEST_STRING.len(), 0);
 
     terminal
-        .termout
+        .terminal_out
         .as_mut()
         .unwrap()
         .read_exact(&mut buf)

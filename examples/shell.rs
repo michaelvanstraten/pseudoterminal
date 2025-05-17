@@ -1,10 +1,19 @@
 use pseudoterminal::CommandExt;
-use std::io::{stdout, Read, Write};
+use std::io::{Read, Write, stdout};
 use std::process::Command;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Create a new pseudoterminal
-    let mut cmd = Command::new("bash"); // or any other desired command
+
+    cfg_if::cfg_if! {
+        if #[cfg(unix)] {
+            let mut cmd = Command::new("bash");
+        } else if #[cfg(windows)] {
+            let mut cmd = Command::new("cmd.exe");
+        } else {
+            panic!("Unsupported platform")
+        }
+    }
     let mut terminal = cmd.spawn_terminal()?;
 
     // Read from and write to the terminal
@@ -17,14 +26,14 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         // Write input to the terminal
         terminal
-            .termin
+            .terminal_in
             .as_mut()
             .unwrap()
             .write_all(input_buffer.as_bytes())?;
 
         // Read output from the terminal
         let bytes_read = terminal
-            .termout
+            .terminal_out
             .as_mut()
             .unwrap()
             .read(&mut output_buffer)?;
