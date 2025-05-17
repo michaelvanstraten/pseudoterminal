@@ -1,5 +1,7 @@
 use std::fmt;
-use std::io::{self, IoSlice, IoSliceMut, Read, Write};
+use std::io::{self, Read, Write};
+#[cfg(CHANNEL_NIGHTLY)]
+use std::io::{IoSlice, IoSliceMut};
 use std::process::{Child as ChildProcess, Command};
 
 use crate::TerminalSize;
@@ -275,6 +277,8 @@ impl Write for TerminalIn {
         self.inner.write_vectored(bufs)
     }
 
+    #[cfg(CHANNEL_NIGHTLY)]
+    #[inline]
     fn is_write_vectored(&self) -> bool {
         io::Write::is_write_vectored(&self.inner)
     }
@@ -355,6 +359,7 @@ impl Read for TerminalOut {
         self.inner.read_vectored(bufs)
     }
 
+    #[cfg(CHANNEL_NIGHTLY)]
     #[inline]
     fn is_read_vectored(&self) -> bool {
         self.inner.is_read_vectored()
