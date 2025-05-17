@@ -1,27 +1,36 @@
-use std::thread;
-use std::process::Command;
 use std::io::{Read, Write};
-use websocket::sync::Server;
-use websocket::OwnedMessage;
+use std::process::Command;
+use std::thread;
 
-use pseudoterminal::CommandExt;
+use websocket::OwnedMessage;
+use websocket::sync::Server;
+
+use pseudoterminal::sync::CommandExt;
 
 fn main() {
-	let server = Server::bind("127.0.0.1:3001").unwrap();
+    let server = Server::bind("127.0.0.1:3001").unwrap();
 
-	for request in server.filter_map(Result::ok) {
-		// Spawn a new thread for each connection.
-		thread::spawn(|| {
-			let ws = request.accept().unwrap();
+    for request in server.filter_map(Result::ok) {
+        // Spawn a new thread for each connection.
+        thread::spawn(|| {
+            let ws = request.accept().unwrap();
 
-			let ip = ws.peer_addr().unwrap();
+            let ip = ws.peer_addr().unwrap();
 
-			println!("Connection from {}", ip);
+            println!("Connection from {}", ip);
 
-			let (mut receiver, mut sender) = ws.split().unwrap();
+            let (mut receiver, mut sender) = ws.split().unwrap();
 
-            // Spawn a new pseudoterminal (e.g., bash shell)
-            let mut cmd = Command::new("bash");
+            // Spawn a new pseudoterminal
+            cfg_if::cfg_if! {
+                if #[cfg(unix)] {
+                    let mut cmd = Command::new("bash");
+                } else if #[cfg(windows)] {
+                    let mut cmd = Command::new("cmd.exe");
+                } else {
+                    panic!("Unsupported platform")
+                }
+            }
             let mut terminal = match cmd.spawn_terminal() {
                 Ok(t) => t,
                 Err(e) => {
@@ -29,8 +38,8 @@ fn main() {
                     return;
                 }
             };
-            let mut termout = terminal.termout.take().unwrap();
-            let mut termin = terminal.termin.take().unwrap();
+            let mut termin = terminal.terminal_in.take().unwrap();
+            let mut termout = terminal.terminal_out.take().unwrap();
 
             let send_thread = thread::spawn(move || {
                 let mut buffer = [0u8; 1024];
@@ -52,25 +61,25 @@ fn main() {
                 }
             });
 
-			for message in receiver.incoming_messages() {
-				match message.unwrap() {
-                        OwnedMessage::Text(data) => {
-                            if let Err(e) = termin.write_all(data.as_bytes()) {
-                                eprintln!("Error writing to PTY: {}", e);
-                                break;
-                            }
-                        }
-                        OwnedMessage::Close(_) => {
-                            // Client closed connection
+            for message in receiver.incoming_messages() {
+                match message.unwrap() {
+                    OwnedMessage::Text(data) => {
+                        if let Err(e) = termin.write_all(data.as_bytes()) {
+                            eprintln!("Error writing to PTY: {}", e);
                             break;
                         }
-                        _ => {} // Ignore other message types
-				}
-			}
+                    }
+                    OwnedMessage::Close(_) => {
+                        // Client closed connection
+                        break;
+                    }
+                    _ => {} // Ignore other message types
+                }
+            }
 
             // Wait for both threads to finish
             let _ = send_thread.join();
             println!("Connection from {} closed", ip);
-		});
-	}
+        });
+    }
 }
