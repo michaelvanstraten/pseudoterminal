@@ -39,18 +39,18 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
 
     // Split the WebSocket stream and terminal for concurrent reads/writes
     let (mut ws_sink, mut ws_stream) = ws_stream.split();
-    let (mut terminal_in, mut terminal_out) = terminal.split().unwrap();
+    let (mut term_in, mut term_out) = terminal.split().unwrap();
 
     // Forward WebSocket messages to terminal
     let ws_to_terminal = tokio::spawn(async move {
         while let Some(message) = ws_stream.next().await {
             match message {
                 Ok(msg) if msg.is_binary() || msg.is_text() => {
-                    if let Err(e) = terminal_in.write_all(&msg.into_data()).await {
+                    if let Err(e) = term_in.write_all(&msg.into_data()).await {
                         eprintln!("Error writing to terminal: {e}");
                         break;
                     }
-                    if let Err(e) = terminal_in.flush().await {
+                    if let Err(e) = term_in.flush().await {
                         eprintln!("Error flushing terminal: {e}");
                         break;
                     }
@@ -65,12 +65,12 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
     });
 
     // Forward terminal output to WebSocket
-    let terminal_to_ws = tokio::spawn(async move {
+    let term_to_ws = tokio::spawn(async move {
         // Buffer for reading from terminal
         let mut buf = [0u8; 1024];
 
         loop {
-            match terminal_out.read(&mut buf).await {
+            match term_out.read(&mut buf).await {
                 Ok(0) => break, // EOF
                 Ok(n) => {
                     if let Err(e) = ws_sink.send(Message::binary(buf[..n].to_vec())).await {
@@ -89,7 +89,7 @@ async fn handle_connection(peer: SocketAddr, stream: TcpStream) -> Result<()> {
     // Wait for either task to complete
     tokio::select! {
         _ = ws_to_terminal => {},
-        _ = terminal_to_ws => {},
+        _ = term_to_ws => {},
     };
 
     Ok(())

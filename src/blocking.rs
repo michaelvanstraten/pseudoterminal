@@ -1,6 +1,5 @@
 use std::fmt;
 use std::io::{self, PipeReader, PipeWriter, Read, Write};
-#[cfg(CHANNEL_NIGHTLY)]
 use std::io::{IoSlice, IoSliceMut};
 use std::process::{Child as ChildProcess, Command};
 
@@ -55,7 +54,7 @@ pub trait CommandExt {
     ///     rows: 30,
     /// };
     ///
-    /// let mut terminal = cmd.spawn_terminal_with_size(size)
+    /// let mut terminal = cmd.spawn_term_with_size(size)
     ///     .expect("Failed to spawn terminal");
     ///
     /// // Now you can interact with the terminal
@@ -66,15 +65,15 @@ pub trait CommandExt {
     ///
     /// This function will return an error if the PTY creation fails, if setting up the
     /// process environment fails, or if spawning the process fails.
-    fn spawn_terminal_with_size(&mut self, size: TerminalSize) -> io::Result<Terminal>;
+    fn spawn_term_with_size(&mut self, size: TerminalSize) -> io::Result<Terminal>;
 }
 
 impl CommandExt for Command {
     fn spawn_terminal(&mut self) -> io::Result<Terminal> {
-        self.spawn_terminal_with_size(TerminalSize::default())
+        self.spawn_term_with_size(TerminalSize::default())
     }
 
-    fn spawn_terminal_with_size(&mut self, size: TerminalSize) -> io::Result<Terminal> {
+    fn spawn_term_with_size(&mut self, size: TerminalSize) -> io::Result<Terminal> {
         imp::Terminal::spawn_terminal(self, size).map(Terminal::from)
     }
 }
@@ -83,13 +82,38 @@ impl CommandExt for Command {
 ///
 /// This struct manages the PTY lifecycle, provides access to its I/O streams,
 /// and allows interaction with the spawned child process.
+///
+/// `Terminal` implements `Read` and `Write` traits directly, allowing you to use it as a
+/// standard I/O stream without explicitly accessing the inner streams. Read operations are
+/// forwarded to the output stream, and write operations to the input stream.
+///
+/// ```no_run
+/// use std::process::Command;
+/// use pseudoterminal::CommandExt;
+/// use std::io::{Read, Write};
+///
+/// let mut cmd = Command::new("bash");
+/// let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
+///
+/// // Write directly to the terminal
+/// terminal.write_all(b"echo Hello, World!\n").expect("Write failed");
+/// terminal.flush().expect("Flush failed");
+///
+/// // Read directly from the terminal
+/// let mut buffer = [0; 1024];
+/// let bytes_read = terminal.read(&mut buffer).expect("Read failed");
+/// println!("Terminal output: {}", String::from_utf8_lossy(&buffer[..bytes_read]));
+/// ```
+///
+/// If you've already called `split()` and taken away the terminal's I/O streams,
+/// the `Read` and `Write` operations will return an appropriate `io::Error`.
 pub struct Terminal {
     handle: imp::Terminal,
     child_proc: ChildProcess,
     /// The input stream (write) for the terminal. `None` if split.
-    pub terminal_in: Option<TerminalIn>,
+    pub term_in: Option<TerminalIn>,
     /// The output stream (read) for the terminal. `None` if split.
-    pub terminal_out: Option<TerminalOut>,
+    pub term_out: Option<TerminalOut>,
 }
 
 impl From<(imp::Terminal, ChildProcess, (PipeWriter, PipeReader))> for Terminal {
@@ -103,8 +127,8 @@ impl From<(imp::Terminal, ChildProcess, (PipeWriter, PipeReader))> for Terminal 
         Terminal {
             handle,
             child_proc,
-            terminal_in: Some(input.into()),
-            terminal_out: Some(output.into()),
+            term_in: Some(input.into()),
+            term_out: Some(output.into()),
         }
     }
 }
@@ -117,7 +141,7 @@ impl Terminal {
     /// This is useful when you need to pass the streams to different parts of your
     /// application or handle them in separate threads.
     ///
-    /// After calling this, `self.terminal_in` and `self.terminal_out` will be `None`.
+    /// After calling this, `self.term_in` and `self.term_out` will be `None`.
     /// Returns `None` if the terminal has already been split.
     ///
     /// # Examples
@@ -141,9 +165,9 @@ impl Terminal {
     /// }
     /// ```
     pub fn split(&mut self) -> Option<(TerminalIn, TerminalOut)> {
-        let terminal_in = self.terminal_in.take()?;
-        let terminal_out = self.terminal_out.take()?;
-        Some((terminal_in, terminal_out))
+        let term_in = self.term_in.take()?;
+        let term_out = self.term_out.take()?;
+        Some((term_in, term_out))
     }
 
     /// Gets the current size of the pseudo-terminal.
@@ -256,9 +280,9 @@ impl Terminal {
 /// let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
 ///
 /// // Write a command to the terminal
-/// if let Some(ref mut terminal_in) = terminal.terminal_in {
-///     terminal_in.write_all(b"echo Hello, World!\n").expect("Write failed");
-///     terminal_in.flush().expect("Flush failed");
+/// if let Some(ref mut term_in) = terminal.term_in {
+///     term_in.write_all(b"echo Hello, World!\n").expect("Write failed");
+///     term_in.flush().expect("Flush failed");
 /// }
 /// ```
 pub struct TerminalIn {
@@ -293,12 +317,6 @@ impl From<PipeWriter> for TerminalIn {
     }
 }
 
-impl fmt::Debug for TerminalIn {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("TerminalIn").finish_non_exhaustive()
-    }
-}
-
 /// An output stream for reading from a pseudo-terminal.
 ///
 /// This struct represents the output side of a pseudo-terminal and implements the
@@ -317,15 +335,15 @@ impl fmt::Debug for TerminalIn {
 /// let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
 ///
 /// // Send a command
-/// if let Some(ref mut terminal_in) = terminal.terminal_in {
+/// if let Some(ref mut term_in) = terminal.term_in {
 ///     use std::io::Write;
-///     terminal_in.write_all(b"echo Hello, World!\n").expect("Write failed");
+///     term_in.write_all(b"echo Hello, World!\n").expect("Write failed");
 /// }
 ///
 /// // Read the output
-/// if let Some(ref mut terminal_out) = terminal.terminal_out {
+/// if let Some(ref mut term_out) = terminal.term_out {
 ///     let mut buffer = [0; 1024];
-///     let bytes_read = terminal_out.read(&mut buffer).expect("Read failed");
+///     let bytes_read = term_out.read(&mut buffer).expect("Read failed");
 ///     println!("Read {} bytes: {}", bytes_read,
 ///              String::from_utf8_lossy(&buffer[..bytes_read]));
 /// }
@@ -361,8 +379,96 @@ impl From<PipeReader> for TerminalOut {
     }
 }
 
+impl fmt::Debug for TerminalIn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("TerminalIn").finish_non_exhaustive()
+    }
+}
+
 impl fmt::Debug for TerminalOut {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("TerminalOut").finish_non_exhaustive()
+    }
+}
+
+impl fmt::Debug for Terminal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Terminal")
+            .field("child_proc", &self.child_proc)
+            .field("term_in", &self.term_in)
+            .field("term_out", &self.term_out)
+            .finish_non_exhaustive()
+    }
+}
+
+impl Read for Terminal {
+    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+        match &mut self.term_out {
+            Some(out) => out.read(buf),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "terminal output has been taken away",
+            )),
+        }
+    }
+
+    fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
+        match &mut self.term_out {
+            Some(out) => out.read_vectored(bufs),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "terminal output has been taken away",
+            )),
+        }
+    }
+
+    #[cfg(CHANNEL_NIGHTLY)]
+    #[inline]
+    fn is_read_vectored(&self) -> bool {
+        match &self.term_out {
+            Some(out) => out.is_read_vectored(),
+            None => false,
+        }
+    }
+}
+
+impl Write for Terminal {
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        match &mut self.term_in {
+            Some(input) => input.write(buf),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "terminal input has been taken away",
+            )),
+        }
+    }
+
+    fn write_vectored(&mut self, bufs: &[IoSlice<'_>]) -> io::Result<usize> {
+        match &mut self.term_in {
+            Some(input) => input.write_vectored(bufs),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "terminal input has been taken away",
+            )),
+        }
+    }
+
+    #[cfg(CHANNEL_NIGHTLY)]
+    #[inline]
+    fn is_write_vectored(&self) -> bool {
+        match &self.term_in {
+            Some(input) => input.is_write_vectored(),
+            None => false,
+        }
+    }
+
+    fn flush(&mut self) -> io::Result<()> {
+        match &mut self.term_in {
+            Some(input) => input.flush(),
+            None => Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "terminal input has been taken away",
+            )),
+        }
     }
 }

@@ -25,13 +25,13 @@
 //!     let mut terminal = cmd.spawn_terminal()?;
 //!    
 //!     // Write to the terminal
-//!     if let Some(ref mut input) = terminal.terminal_in {
+//!     if let Some(ref mut input) = terminal.term_in {
 //!         input.write_all(b"echo Hello from pseudoterminal!\n")?;
 //!         input.flush()?;
 //!     }
 //!    
 //!     // Read from the terminal
-//!     if let Some(ref mut output) = terminal.terminal_out {
+//!     if let Some(ref mut output) = terminal.term_out {
 //!         let mut buffer = [0; 1024];
 //!         let bytes_read = output.read(&mut buffer)?;
 //!         println!("{}", String::from_utf8_lossy(&buffer[..bytes_read]));

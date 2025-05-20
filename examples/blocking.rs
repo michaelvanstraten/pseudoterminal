@@ -38,8 +38,7 @@ fn main() {
                     return;
                 }
             };
-            let mut termin = terminal.terminal_in.take().unwrap();
-            let mut termout = terminal.terminal_out.take().unwrap();
+            let mut termout = terminal.term_out.take().unwrap();
 
             let send_thread = thread::spawn(move || {
                 let mut buffer = [0u8; 1024];
@@ -64,7 +63,7 @@ fn main() {
             for message in receiver.incoming_messages() {
                 match message.unwrap() {
                     OwnedMessage::Text(data) => {
-                        if let Err(e) = termin.write_all(data.as_bytes()) {
+                        if let Err(e) = terminal.write_all(data.as_bytes()) {
                             eprintln!("Error writing to PTY: {e}");
                             break;
                         }

@@ -1,5 +1,7 @@
 use std::cell::OnceCell;
 use std::fmt;
+use std::pin::Pin;
+use std::task::{Context, Poll};
 
 use std::io::{PipeReader, PipeWriter};
 #[cfg(unix)]
@@ -8,7 +10,7 @@ use std::os::fd::OwnedFd;
 use std::os::windows::io::OwnedHandle;
 use std::process::{ChildStdin as StdChildStdin, ChildStdout as StdChildStdout};
 
-use tokio::io::{self, AsyncRead, AsyncWrite};
+use tokio::io::{self, AsyncRead, AsyncWrite, ReadBuf};
 use tokio::process::{Child as ChildProcess, ChildStdin, ChildStdout, Command};
 
 use crate::TerminalSize;
@@ -67,7 +69,7 @@ pub trait CommandExt {
     ///         rows: 30,
     ///     };
     ///
-    ///     let mut terminal = cmd.spawn_terminal_with_size(size)
+    ///     let mut terminal = cmd.spawn_term_with_size(size)
     ///         .expect("Failed to spawn terminal");
     ///
     ///     // Now you can interact with the terminal asynchronously
@@ -79,15 +81,15 @@ pub trait CommandExt {
     ///
     /// This function will return an error if the PTY creation fails, if setting up the
     /// process environment fails, or if spawning the process fails.
-    fn spawn_terminal_with_size(&mut self, size: TerminalSize) -> io::Result<Terminal>;
+    fn spawn_term_with_size(&mut self, size: TerminalSize) -> io::Result<Terminal>;
 }
 
 impl CommandExt for Command {
     fn spawn_terminal(&mut self) -> io::Result<Terminal> {
-        self.spawn_terminal_with_size(TerminalSize::default())
+        self.spawn_term_with_size(TerminalSize::default())
     }
 
-    fn spawn_terminal_with_size(&mut self, size: TerminalSize) -> io::Result<Terminal> {
+    fn spawn_term_with_size(&mut self, size: TerminalSize) -> io::Result<Terminal> {
         let maybe_handle = OnceCell::new();
         let maybe_io = OnceCell::new();
         let child_proc = self.spawn_with(|std_cmd| {
@@ -113,14 +115,44 @@ impl CommandExt for Command {
 ///
 /// This struct manages the PTY lifecycle, provides access to its I/O streams,
 /// and allows interaction with the spawned child process asynchronously.
+///
+/// `Terminal` implements `AsyncRead` and `AsyncWrite` traits directly, allowing you to use it as a
+/// standard asynchronous I/O stream without explicitly accessing the inner streams. Read operations are
+/// forwarded to the output stream, and write operations to the input stream.
+///
+/// ```no_run
+/// use tokio::process::Command;
+/// use pseudoterminal::non_blocking::CommandExt;
+/// use tokio::io::{AsyncReadExt, AsyncWriteExt};
+///
+/// #[tokio::main]
+/// async fn main() -> std::io::Result<()> {
+///     let mut cmd = Command::new("bash");
+///     let mut terminal = cmd.spawn_terminal()?;
+///
+///     // Write directly to the terminal
+///     terminal.write_all(b"echo Hello, World!\n").await?;
+///     terminal.flush().await?;
+///
+///     // Read directly from the terminal
+///     let mut buffer = [0; 1024];
+///     let bytes_read = terminal.read(&mut buffer[..]).await?;
+///     println!("Terminal output: {}", String::from_utf8_lossy(&buffer[..bytes_read]));
+///     
+///     Ok(())
+/// }
+/// ```
+///
+/// If you've already called `split()` and taken away the terminal's I/O streams,
+/// the `AsyncRead` and `AsyncWrite` operations will return an appropriate `io::Error`.
 pub struct Terminal {
     handle: imp::Terminal,
     child_proc: ChildProcess,
 
     /// The input stream (write) for the terminal. `None` if split.
-    pub terminal_in: Option<TerminalIn>,
+    pub term_in: Option<TerminalIn>,
     /// The output stream (read) for the terminal. `None` if split.
-    pub terminal_out: Option<TerminalOut>,
+    pub term_out: Option<TerminalOut>,
 }
 
 impl TryFrom<(imp::Terminal, ChildProcess, (PipeWriter, PipeReader))> for Terminal {
@@ -145,19 +177,19 @@ impl TryFrom<(imp::Terminal, ChildProcess, (PipeWriter, PipeReader))> for Termin
             }
         }
 
-        let terminal_in = Some(TerminalIn {
+        let term_in = Some(TerminalIn {
             inner: ChildStdin::from_std(std_child_input)?,
         });
 
-        let terminal_out = Some(TerminalOut {
+        let term_out = Some(TerminalOut {
             inner: ChildStdout::from_std(std_child_output)?,
         });
 
         Ok(Terminal {
             handle,
             child_proc,
-            terminal_in,
-            terminal_out,
+            term_in,
+            term_out,
         })
     }
 }
@@ -192,14 +224,14 @@ impl Terminal {
     /// }
     /// ```
     pub fn split(&mut self) -> Option<(TerminalIn, TerminalOut)> {
-        if self.terminal_in.is_none() || self.terminal_out.is_none() {
+        if self.term_in.is_none() || self.term_out.is_none() {
             return None;
         }
 
-        let terminal_in = self.terminal_in.take().unwrap();
-        let terminal_out = self.terminal_out.take().unwrap();
+        let term_in = self.term_in.take().unwrap();
+        let term_out = self.term_out.take().unwrap();
 
-        Some((terminal_in, terminal_out))
+        Some((term_in, term_out))
     }
 
     /// Gets the current size of the pseudo-terminal.
@@ -319,9 +351,9 @@ impl Terminal {
 ///     let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
 ///
 ///     // Write a command to the terminal
-///     if let Some(ref mut terminal_in) = terminal.terminal_in {
-///         terminal_in.write_all(b"echo Hello, World!\n").await.expect("Write failed");
-///         terminal_in.flush().await.expect("Flush failed");
+///     if let Some(ref mut term_in) = terminal.term_in {
+///         term_in.write_all(b"echo Hello, World!\n").await.expect("Write failed");
+///         term_in.flush().await.expect("Flush failed");
 ///     }
 /// }
 /// ```
@@ -349,14 +381,14 @@ pub struct TerminalIn {
 ///     let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
 ///
 ///     // Send a command
-///     if let Some(ref mut terminal_in) = terminal.terminal_in {
-///         terminal_in.write_all(b"echo Hello, World!\n").await.expect("Write failed");
+///     if let Some(ref mut term_in) = terminal.term_in {
+///         term_in.write_all(b"echo Hello, World!\n").await.expect("Write failed");
 ///     }
 ///
 ///     // Read the output
-///     if let Some(ref mut terminal_out) = terminal.terminal_out {
+///     if let Some(ref mut term_out) = terminal.term_out {
 ///         let mut buffer = [0; 1024];
-///         let bytes_read = terminal_out.read(&mut buffer[..]).await.expect("Read failed");
+///         let bytes_read = term_out.read(&mut buffer[..]).await.expect("Read failed");
 ///         println!("Read {} bytes: {}", bytes_read,
 ///                  String::from_utf8_lossy(&buffer[..bytes_read]));
 ///     }
@@ -418,10 +450,68 @@ impl fmt::Debug for TerminalOut {
 impl fmt::Debug for Terminal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Terminal")
-            .field("handle", &"<terminal_handle>")
+            .field("handle", &"<term_handle>")
             .field("child_proc", &self.child_proc)
-            .field("terminal_in", &self.terminal_in)
-            .field("terminal_out", &self.terminal_out)
+            .field("term_in", &self.term_in)
+            .field("term_out", &self.term_out)
             .finish()
+    }
+}
+
+impl AsyncRead for Terminal {
+    fn poll_read(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        match &mut self.term_out {
+            Some(out) => Pin::new(out).poll_read(cx, buf),
+            None => Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "terminal output has been taken away",
+            ))),
+        }
+    }
+}
+
+impl AsyncWrite for Terminal {
+    fn poll_write(
+        mut self: Pin<&mut Self>, 
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        match &mut self.term_in {
+            Some(input) => Pin::new(input).poll_write(cx, buf),
+            None => Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "terminal input has been taken away",
+            ))),
+        }
+    }
+
+    fn poll_flush(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
+        match &mut self.term_in {
+            Some(input) => Pin::new(input).poll_flush(cx),
+            None => Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "terminal input has been taken away",
+            ))),
+        }
+    }
+
+    fn poll_shutdown(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
+        match &mut self.term_in {
+            Some(input) => Pin::new(input).poll_shutdown(cx),
+            None => Poll::Ready(Err(io::Error::new(
+                io::ErrorKind::NotConnected,
+                "terminal input has been taken away",
+            ))),
+        }
     }
 }
