@@ -24,7 +24,7 @@ pub trait CommandExt {
     /// use pseudoterminal::CommandExt;
     ///
     /// let mut cmd = Command::new("bash");
-    /// let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
+    /// let mut terminal = cmd.spawn_terminal().expect("spawning a pseudoterminal should succeed on supported platforms");
     ///
     /// // Now you can interact with the terminal
     /// // ...
@@ -54,8 +54,8 @@ pub trait CommandExt {
     ///     rows: 30,
     /// };
     ///
-    /// let mut terminal = cmd.spawn_term_with_size(size)
-    ///     .expect("Failed to spawn terminal");
+    /// let mut terminal = cmd.spawn_terminal_with_size(size)
+    ///     .expect("spawning a pseudoterminal with specific size should succeed on supported platforms");
     ///
     /// // Now you can interact with the terminal
     /// // ...
@@ -90,19 +90,23 @@ impl CommandExt for Command {
 /// ```no_run
 /// use std::process::Command;
 /// use pseudoterminal::CommandExt;
-/// use std::io::{Read, Write};
+/// use std::io::{self, Read, Write};
 ///
-/// let mut cmd = Command::new("bash");
-/// let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
+/// fn main() -> io::Result<()> {
+///     let mut cmd = Command::new("bash");
+///     let mut terminal = cmd.spawn_terminal()?;
 ///
-/// // Write directly to the terminal
-/// terminal.write_all(b"echo Hello, World!\n").expect("Write failed");
-/// terminal.flush().expect("Flush failed");
+///     // Write directly to the terminal
+///     terminal.write_all(b"echo Hello, World!\n")?;
+///     terminal.flush()?;
 ///
-/// // Read directly from the terminal
-/// let mut buffer = [0; 1024];
-/// let bytes_read = terminal.read(&mut buffer).expect("Read failed");
-/// println!("Terminal output: {}", String::from_utf8_lossy(&buffer[..bytes_read]));
+///     // Read directly from the terminal
+///     let mut buffer = [0; 1024];
+///     let bytes_read = terminal.read(&mut buffer[..])?;
+///     println!("Terminal output: {}", String::from_utf8_lossy(&buffer[..bytes_read]));
+///
+///     Ok(())
+/// }
 /// ```
 ///
 /// If you've already called `split()` and taken away the terminal's I/O streams,
@@ -111,9 +115,9 @@ pub struct Terminal {
     handle: imp::Terminal,
     child_proc: ChildProcess,
     /// The input stream (write) for the terminal. `None` if split.
-    pub term_in: Option<TerminalIn>,
+    pub terminal_in: Option<TerminalIn>,
     /// The output stream (read) for the terminal. `None` if split.
-    pub term_out: Option<TerminalOut>,
+    pub terminal_out: Option<TerminalOut>,
 }
 
 impl From<(imp::Terminal, ChildProcess, (PipeWriter, PipeReader))> for Terminal {
@@ -127,8 +131,8 @@ impl From<(imp::Terminal, ChildProcess, (PipeWriter, PipeReader))> for Terminal 
         Terminal {
             handle,
             child_proc,
-            term_in: Some(input.into()),
-            term_out: Some(output.into()),
+            terminal_in: Some(input.into()),
+            terminal_out: Some(output.into()),
         }
     }
 }
@@ -157,17 +161,17 @@ impl Terminal {
     /// // Split the terminal to handle I/O separately
     /// if let Some((mut input, mut output)) = terminal.split() {
     ///     // Now you can use input and output independently
-    ///     input.write_all(b"echo hello\n").expect("Write failed");
+    ///     input.write_all(b"echo hello\n").expect("writing to terminal should succeed unless the process has terminated");
     ///     
     ///     let mut buffer = String::new();
-    ///     output.read_to_string(&mut buffer).expect("Read failed");
+    ///     output.read_to_string(&mut buffer).expect("reading from terminal should succeed unless the process has terminated");
     ///     println!("Terminal output: {}", buffer);
     /// }
     /// ```
     pub fn split(&mut self) -> Option<(TerminalIn, TerminalOut)> {
-        let term_in = self.term_in.take()?;
-        let term_out = self.term_out.take()?;
-        Some((term_in, term_out))
+        let terminal_in = self.terminal_in.take()?;
+        let terminal_out = self.terminal_out.take()?;
+        Some((terminal_in, terminal_out))
     }
 
     /// Gets the current size of the pseudo-terminal.
@@ -220,7 +224,7 @@ impl Terminal {
     ///     columns: 100,
     /// };
     ///
-    /// terminal.set_term_size(new_size).expect("Failed to resize terminal");
+    /// terminal.set_term_size(new_size).expect("resizing the terminal should succeed on supported platforms");
     /// ```
     ///
     /// # Errors
@@ -249,7 +253,7 @@ impl Terminal {
     /// // Do some work with the terminal...
     ///
     /// // When done, close the terminal and terminate the process
-    /// terminal.close().expect("Failed to close terminal");
+    /// terminal.close().expect("closing the terminal should succeed unless the process has already terminated");
     /// ```
     ///
     /// # Errors
@@ -277,12 +281,12 @@ impl Terminal {
 /// use std::io::Write;
 ///
 /// let mut cmd = Command::new("bash");
-/// let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
+/// let mut terminal = cmd.spawn_terminal().expect("spawning a pseudoterminal should succeed on supported platforms");
 ///
 /// // Write a command to the terminal
-/// if let Some(ref mut term_in) = terminal.term_in {
-///     term_in.write_all(b"echo Hello, World!\n").expect("Write failed");
-///     term_in.flush().expect("Flush failed");
+/// if let Some(ref mut terminal_in) = terminal.terminal_in {
+///     terminal_in.write_all(b"echo Hello, World!\n").expect("writing to terminal should succeed unless the process has terminated");
+///     terminal_in.flush().expect("flushing terminal output should succeed unless the process has terminated");
 /// }
 /// ```
 pub struct TerminalIn {
@@ -335,15 +339,15 @@ impl From<PipeWriter> for TerminalIn {
 /// let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
 ///
 /// // Send a command
-/// if let Some(ref mut term_in) = terminal.term_in {
+/// if let Some(ref mut terminal_in) = terminal.terminal_in {
 ///     use std::io::Write;
-///     term_in.write_all(b"echo Hello, World!\n").expect("Write failed");
+///     terminal_in.write_all(b"echo Hello, World!\n").expect("writing to terminal should succeed unless the process has terminated");
 /// }
 ///
 /// // Read the output
-/// if let Some(ref mut term_out) = terminal.term_out {
+/// if let Some(ref mut terminal_out) = terminal.terminal_out {
 ///     let mut buffer = [0; 1024];
-///     let bytes_read = term_out.read(&mut buffer).expect("Read failed");
+///     let bytes_read = terminal_out.read(&mut buffer).expect("reading from terminal should succeed unless the process has terminated");
 ///     println!("Read {} bytes: {}", bytes_read,
 ///              String::from_utf8_lossy(&buffer[..bytes_read]));
 /// }
@@ -357,7 +361,6 @@ impl Read for TerminalOut {
         self.inner.read(buf)
     }
 
-    #[cfg(CHANNEL_NIGHTLY)]
     fn read_vectored(&mut self, bufs: &mut [IoSliceMut<'_>]) -> io::Result<usize> {
         self.inner.read_vectored(bufs)
     }

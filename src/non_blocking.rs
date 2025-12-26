@@ -36,7 +36,7 @@ pub trait CommandExt {
     /// #[tokio::main]
     /// async fn main() {
     ///     let mut cmd = Command::new("bash");
-    ///     let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
+    ///     let mut terminal = cmd.spawn_terminal().expect("spawning a pseudoterminal should succeed on supported platforms");
     ///
     ///     // Now you can interact with the terminal asynchronously
     ///     // ...
@@ -69,8 +69,8 @@ pub trait CommandExt {
     ///         rows: 30,
     ///     };
     ///
-    ///     let mut terminal = cmd.spawn_term_with_size(size)
-    ///         .expect("Failed to spawn terminal");
+    ///     let mut terminal = cmd.spawn_terminal_with_size(size)
+    ///         .expect("spawning a pseudoterminal with specific size should succeed on supported platforms");
     ///
     ///     // Now you can interact with the terminal asynchronously
     ///     // ...
@@ -97,8 +97,8 @@ impl CommandExt for Command {
 
             maybe_handle
                 .set(handle)
-                .expect("Cell has not been initialized");
-            maybe_io.set(io).expect("Cell has not been initialized");
+                .expect("OnceCell should not be initialized more than once");
+            maybe_io.set(io).expect("OnceCell should not be initialized more than once");
 
             Ok(child_proc)
         })?;
@@ -123,10 +123,10 @@ impl CommandExt for Command {
 /// ```no_run
 /// use tokio::process::Command;
 /// use pseudoterminal::non_blocking::CommandExt;
-/// use tokio::io::{AsyncReadExt, AsyncWriteExt};
+/// use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 ///
 /// #[tokio::main]
-/// async fn main() -> std::io::Result<()> {
+/// async fn main() -> io::Result<()> {
 ///     let mut cmd = Command::new("bash");
 ///     let mut terminal = cmd.spawn_terminal()?;
 ///
@@ -147,8 +147,7 @@ impl CommandExt for Command {
 /// the `AsyncRead` and `AsyncWrite` operations will return an appropriate `io::Error`.
 pub struct Terminal {
     handle: imp::Terminal,
-    child_proc: ChildProcess,
-
+    pub child: ChildProcess,
     /// The input stream (write) for the terminal. `None` if split.
     pub term_in: Option<TerminalIn>,
     /// The output stream (read) for the terminal. `None` if split.
@@ -211,14 +210,14 @@ impl Terminal {
     /// #[tokio::main]
     /// async fn main() {
     ///     let mut cmd = Command::new("bash");
-    ///     let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
+    ///     let mut terminal = cmd.spawn_terminal().expect("spawning a pseudoterminal should succeed on supported platforms");
     ///     
     ///     if let Some((mut input, mut output)) = terminal.split() {
-    ///         input.write_all(b"echo Hello, World!\n").await.expect("Write failed");
-    ///         input.flush().await.expect("Flush failed");
+    ///         input.write_all(b"echo Hello, World!\n").await.expect("writing to terminal should succeed unless the process has terminated");
+    ///         input.flush().await.expect("flushing terminal output should succeed unless the process has terminated");
     ///     
     ///         let mut buffer = String::new();
-    ///         output.read_to_string(&mut buffer).await.expect("Read failed");
+    ///         output.read_to_string(&mut buffer).await.expect("reading from terminal should succeed unless the process has terminated");
     ///         println!("Terminal output: {}", buffer);
     ///     }
     /// }
@@ -348,12 +347,12 @@ impl Terminal {
 /// #[tokio::main]
 /// async fn main() {
 ///     let mut cmd = Command::new("bash");
-///     let mut terminal = cmd.spawn_terminal().expect("Failed to spawn terminal");
+/// let mut terminal = cmd.spawn_terminal().expect("spawning a pseudoterminal should succeed on supported platforms");
 ///
 ///     // Write a command to the terminal
 ///     if let Some(ref mut term_in) = terminal.term_in {
-///         term_in.write_all(b"echo Hello, World!\n").await.expect("Write failed");
-///         term_in.flush().await.expect("Flush failed");
+///         terminal_in.write_all(b"echo Hello, World!\n").await.expect("writing to terminal should succeed unless the process has terminated");
+///         terminal_in.flush().await.expect("flushing terminal output should succeed unless the process has terminated");
 ///     }
 /// }
 /// ```
@@ -388,7 +387,7 @@ pub struct TerminalIn {
 ///     // Read the output
 ///     if let Some(ref mut term_out) = terminal.term_out {
 ///         let mut buffer = [0; 1024];
-///         let bytes_read = term_out.read(&mut buffer[..]).await.expect("Read failed");
+///         let bytes_read = terminal_out.read(&mut buffer[..]).await.expect("reading from terminal should succeed unless the process has terminated");
 ///         println!("Read {} bytes: {}", bytes_read,
 ///                  String::from_utf8_lossy(&buffer[..bytes_read]));
 ///     }
